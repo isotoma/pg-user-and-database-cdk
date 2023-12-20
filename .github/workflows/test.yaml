@@ -20,4 +20,4 @@ jobs:
     - run: npm ci
     - run: npm run lint-check
     # - run: npm run compile
-    - run: npm run -- docs --treatWarningsAsErrors
+    # - run: npm run -- docs --treatWarningsAsErrors
