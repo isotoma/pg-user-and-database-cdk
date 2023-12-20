@@ -25,7 +25,7 @@
         "tsc": "tsc",
         "clean": "rm -rf build/",
         "compile": "npm run clean && npm run -- tsc --outDir build/ && npm run compile-handler && cp -R ./handler/build/ ./build/handler/ && npm run compile-latest-secret-version-handler && cp -R ./latest_secret_version_handler/build/ ./build/latest_secret_version_handler/ && cp package.json README.md ./build/",
-        "version": "auto-changelog --template ./changelog_template.hbs -p && git add CHANGELOG.md",
+        "version": "auto-changelog --hide-credit -p && git add CHANGELOG.md",
         "_lint": "eslint 'index.ts' 'test/**/*.ts' 'handler/**/*.ts' jest.config.js",
         "lint": "npm run -- _lint --fix",
         "lint-check": "npm run -- _lint --max-warnings 0",
