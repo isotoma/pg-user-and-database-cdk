@@ -2,7 +2,16 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [1.1.0](https://github.com/isotoma/pg-user-and-database-cdk/compare/1.0.1...1.1.0)
+
+- Publish docs on version publish [`#2`](https://github.com/isotoma/pg-user-and-database-cdk/pull/2)
+- More CI [`#4`](https://github.com/isotoma/pg-user-and-database-cdk/pull/4)
+- Normalise build action name [`#3`](https://github.com/isotoma/pg-user-and-database-cdk/pull/3)
+- Fix handler file locations [`#1`](https://github.com/isotoma/pg-user-and-database-cdk/pull/1)
+
 #### [1.0.1](https://github.com/isotoma/pg-user-and-database-cdk/compare/1.0.0...1.0.1)
+
+> 20 December 2023
 
 - Skip doc publishing [`c5a0972`](https://github.com/isotoma/pg-user-and-database-cdk/commit/c5a097266a8364c93fe09bc0196e85515ee488ce)
 - Skip compile in CI due to permissions error [`4433969`](https://github.com/isotoma/pg-user-and-database-cdk/commit/44339697eeeddcf199d7098f71f1babb4fb9e243)
