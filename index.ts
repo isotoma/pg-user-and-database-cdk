@@ -54,7 +54,7 @@ export class PostgresUserAndDatabase extends Construct {
         const handler = new lambda.Function(this, 'OnEvent', {
             code: lambda.Code.fromAsset(pathlib.join(__dirname, 'handler')),
             runtime: lambda.Runtime.NODEJS_18_X,
-            handler: 'index.handler',
+            handler: 'main.handler',
             vpc: props.vpc,
             timeout: cdk.Duration.seconds(30),
         });
@@ -89,7 +89,7 @@ export class PostgresUserAndDatabase extends Construct {
             const secretLatestVersionHandler = new lambda.Function(this, 'OnEventSecretLatestVersion', {
                 code: lambda.Code.fromAsset(pathlib.join(__dirname, 'latest_secret_version_handler')),
                 runtime: lambda.Runtime.NODEJS_18_X,
-                handler: 'index.handler',
+                handler: 'main.handler',
                 timeout: cdk.Duration.seconds(30),
             });
 
