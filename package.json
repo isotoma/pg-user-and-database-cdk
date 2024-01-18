@@ -30,11 +30,13 @@
         "lint": "npm run -- _lint --fix",
         "lint-check": "npm run -- _lint --max-warnings 0",
         "clean-handler": "rm -rf handler/build/",
-        "compile-handler": "npm run clean-handler && npx esbuild --platform=node --target=node16 --minify-syntax --external:aws-sdk --bundle --outdir=./handler/build ./handler/main.ts",
+        "esbuild": "esbuild",
+        "compile-handler": "npm run clean-handler && mkdir -p handler/build/ && npm run -- esbuild --platform=node --target=node16 --minify-syntax --external:aws-sdk --bundle --outdir=./handler/build ./handler/main.ts",
         "clean-latest-secret-version-handler": "rm -rf latest_secret_version_handler/build/",
-        "compile-latest-secret-version-handler": "npm run clean-handler && npx esbuild --platform=node --target=node16 --minify-syntax --external:aws-sdk --bundle --outdir=./latest_secret_version_handler/build ./latest_secret_version_handler/main.ts",
+        "compile-latest-secret-version-handler": "npm run clean-latest-secret-version-handler && mkdir -p ./latest_secret_version_handler/build && npm run -- esbuild --platform=node --target=node16 --minify-syntax --external:aws-sdk --bundle --outdir=./latest_secret_version_handler/build ./latest_secret_version_handler/main.ts",
         "clean-handlers": "npm run clean-handler && npm run clean-latest-secret-version-handler",
-        "compile-handlers": "npm run compile-handler && npm run compile-latest-secret-version-handler"
+        "compile-handlers": "npm run compile-handler && npm run compile-latest-secret-version-handler",
+        "docs": "typedoc index.ts --includeVersion"
     },
     "peerDependencies": {
         "aws-cdk-lib": "^2.0.0",
@@ -51,6 +53,7 @@
         "aws-cdk-lib": "^2.15.0",
         "aws-sdk": "^2.1025.0",
         "constructs": "^10.0.0",
+        "esbuild": "^0.19.11",
         "eslint": "^8.0.1",
         "eslint-config-prettier": "^8.3.0",
         "eslint-plugin-prettier": "^4.0.0",
