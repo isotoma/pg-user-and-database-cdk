@@ -21,10 +21,10 @@
     "types": ["node", "jest"]
   },
   "include": [
-    "index.ts",
-    "handler/"
+    "index.ts"
   ],
   "exclude": [
-      "build/"
+      "build/",
+      "handler/"
   ]
 }
