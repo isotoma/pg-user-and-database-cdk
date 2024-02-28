@@ -243,7 +243,7 @@ const handleCreate = async (event: CreateEvent): Promise<Response> => {
         dbSecretArn: event.ResourceProperties.userSecretArn,
         dbClusterHostname: event.ResourceProperties.dbClusterHostname,
         dbClusterPort: event.ResourceProperties.dbClusterPort,
-        databaseName: event.ResourceProperties.databaseName,
+        databaseName: 'postgres',
     });
 
     const userCredentials = await userClientManager.getCredentials();
@@ -325,7 +325,7 @@ const handleUpdate = async (event: UpdateEvent): Promise<Response> => {
         dbSecretArn: event.ResourceProperties.userSecretArn,
         dbClusterHostname: event.ResourceProperties.dbClusterHostname,
         dbClusterPort: event.ResourceProperties.dbClusterPort,
-        databaseName: event.ResourceProperties.databaseName,
+        databaseName: 'postgres',
     });
 
     const userCredentials = await userClient.getCredentials();
