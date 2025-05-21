@@ -261,7 +261,7 @@ const handleCreate = async (event: CreateEvent): Promise<Response> => {
         onCreateIfExists: event.ResourceProperties.onCreateIfExists,
     });
 
-    const createUserQuery = `CREATE USER ${userCredentials.username} WITH PASSWORD '${userCredentials.password}' CREATEDB LOGIN;`;
+    const createUserQuery = `CREATE USER "${userCredentials.username}" WITH PASSWORD '${userCredentials.password}' CREATEDB LOGIN;`;
 
     try {
         await adminClient.query(createUserQuery);
@@ -272,17 +272,17 @@ const handleCreate = async (event: CreateEvent): Promise<Response> => {
 
         if (event.ResourceProperties.onCreateIfExists === 'Adopt' && e.code === PostgresErrorCodes.DUPLICATE_OBJECT) {
             // User already exists, so we'll just adopt it. Set the password to the new value and grant CREATEDB and LOGIN
-            await adminClient.query(`ALTER USER ${userCredentials.username} WITH PASSWORD '${userCredentials.password}';`);
-            await adminClient.query(`ALTER USER ${userCredentials.username} WITH CREATEDB LOGIN;`);
+            await adminClient.query(`ALTER USER "${userCredentials.username}" WITH PASSWORD '${userCredentials.password}';`);
+            await adminClient.query(`ALTER USER "${userCredentials.username}" WITH CREATEDB LOGIN;`);
         } else if (event.ResourceProperties.onCreateIfExists === 'DeleteAndRecreate' && e.code === PostgresErrorCodes.DUPLICATE_OBJECT) {
-            await adminClient.query(`DROP USER ${userCredentials.username};`);
+            await adminClient.query(`DROP USER "${userCredentials.username}";`);
             await adminClient.query(createUserQuery);
         } else {
             throw e;
         }
     }
 
-    const createDatabaseQuery = `CREATE DATABASE ${event.ResourceProperties.databaseName};`;
+    const createDatabaseQuery = `CREATE DATABASE "${event.ResourceProperties.databaseName}";`;
 
     const userClient = await userClientManager.getClient();
     try {
@@ -299,11 +299,11 @@ const handleCreate = async (event: CreateEvent): Promise<Response> => {
         if (event.ResourceProperties.onCreateIfExists === 'Adopt' && e.code === PostgresErrorCodes.DUPLICATE_DATABASE) {
             // Database already exists, so we'll just adopt it
             log('Database already exists, adopting');
-            await adminClient.query(`ALTER DATABASE ${event.ResourceProperties.databaseName} OWNER TO ${userCredentials.username};`);
+            await adminClient.query(`ALTER DATABASE "${event.ResourceProperties.databaseName}" OWNER TO "${userCredentials.username}";`);
         } else if (event.ResourceProperties.onCreateIfExists === 'DeleteAndRecreate') {
             if (e.code === PostgresErrorCodes.DUPLICATE_DATABASE) {
                 log('Database already exists, deleting and recreating');
-                await adminClient.query(`DROP DATABASE ${event.ResourceProperties.databaseName};`);
+                await adminClient.query(`DROP DATABASE "${event.ResourceProperties.databaseName}";`);
                 await userClient.query(createDatabaseQuery);
             }
         } else {
@@ -345,7 +345,7 @@ const handleUpdate = async (event: UpdateEvent): Promise<Response> => {
         log('Creating user if it does not exist', { username: userCredentials.username });
         try {
             const client = await adminClient.getClient();
-            await client.query(`CREATE USER ${userCredentials.username} WITH PASSWORD '${userCredentials.password}' CREATEDB LOGIN;`);
+            await client.query(`CREATE USER "${userCredentials.username}" WITH PASSWORD '${userCredentials.password}' CREATEDB LOGIN;`);
         } catch (e) {
             if (!isPostgresError(e)) {
                 throw e;
@@ -364,7 +364,7 @@ const handleUpdate = async (event: UpdateEvent): Promise<Response> => {
     if (event.ResourceProperties.onUpdateSetUserPassword === 'Always') {
         log('Setting user password', { username: userCredentials.username });
         const client = await adminClient.getClient();
-        await client.query(`ALTER USER ${userCredentials.username} WITH PASSWORD '${userCredentials.password}';`);
+        await client.query(`ALTER USER "${userCredentials.username}" WITH PASSWORD '${userCredentials.password}';`);
     } else {
         log('Not setting user password', { username: userCredentials.username });
     }
@@ -372,7 +372,7 @@ const handleUpdate = async (event: UpdateEvent): Promise<Response> => {
     if (event.ResourceProperties.onUpdateSetUserPermissions === 'Always') {
         log('Setting user permissions', { username: userCredentials.username });
         const client = await adminClient.getClient();
-        await client.query(`ALTER USER ${userCredentials.username} WITH CREATEDB LOGIN;`);
+        await client.query(`ALTER USER "${userCredentials.username}" WITH CREATEDB LOGIN;`);
     } else {
         log('Not setting user permissions', { username: userCredentials.username });
     }
@@ -381,7 +381,7 @@ const handleUpdate = async (event: UpdateEvent): Promise<Response> => {
         log('Creating database if it does not exist', { databaseName: event.ResourceProperties.databaseName });
         try {
             const client = await userClient.getClient();
-            await client.query(`CREATE DATABASE ${event.ResourceProperties.databaseName};`);
+            await client.query(`CREATE DATABASE "${event.ResourceProperties.databaseName}";`);
         } catch (e) {
             if (!isPostgresError(e)) {
                 throw e;
@@ -400,7 +400,7 @@ const handleUpdate = async (event: UpdateEvent): Promise<Response> => {
     if (event.ResourceProperties.onUpdateSetDatabaseOwnership === 'Always') {
         log('Setting database ownership', { databaseName: event.ResourceProperties.databaseName });
         const client = await adminClient.getClient();
-        await client.query(`ALTER DATABASE ${event.ResourceProperties.databaseName} OWNER TO ${userCredentials.username};`);
+        await client.query(`ALTER DATABASE "${event.ResourceProperties.databaseName}" OWNER TO "${userCredentials.username}";`);
     } else {
         log('Not setting database ownership', { databaseName: event.ResourceProperties.databaseName });
     }
@@ -445,10 +445,10 @@ const handleDelete = async (event: DeleteEvent): Promise<Response> => {
     const adminClient = await adminClientManager.getClient();
 
     log('Dropping database if exists', { databaseName: event.ResourceProperties.databaseName });
-    await adminClient.query(`DROP DATABASE IF EXISTS ${event.ResourceProperties.databaseName};`);
+    await adminClient.query(`DROP DATABASE IF EXISTS "${event.ResourceProperties.databaseName}";`);
 
     log('Dropping user if exists', { databaseName: event.ResourceProperties.databaseName });
-    await adminClient.query(`DROP USER IF EXISTS ${userCredentials.username};`);
+    await adminClient.query(`DROP USER IF EXISTS "${userCredentials.username}";`);
 
     await adminClient.end();
 
