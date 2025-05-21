@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [1.1.3](https://github.com/isotoma/pg-user-and-database-cdk/compare/1.1.2...1.1.3)
+
+- Quote user and database names in SQL [`#8`](https://github.com/isotoma/pg-user-and-database-cdk/pull/8)
+
 #### [1.1.2](https://github.com/isotoma/pg-user-and-database-cdk/compare/1.1.1...1.1.2)
+
+> 28 February 2024
 
 - Always connect to the postgres database [`#6`](https://github.com/isotoma/pg-user-and-database-cdk/pull/6)
 
