@@ -53,7 +53,7 @@ export class PostgresUserAndDatabase extends Construct {
 
         const handler = new lambda.Function(this, 'OnEvent', {
             code: lambda.Code.fromAsset(pathlib.join(__dirname, 'handler')),
-            runtime: lambda.Runtime.NODEJS_18_X,
+            runtime: new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS, { supportsInlineCode: true }),
             handler: 'main.handler',
             vpc: props.vpc,
             timeout: cdk.Duration.seconds(30),
@@ -88,7 +88,7 @@ export class PostgresUserAndDatabase extends Construct {
         if (props.onUpdateCheckSecretVersion) {
             const secretLatestVersionHandler = new lambda.Function(this, 'OnEventSecretLatestVersion', {
                 code: lambda.Code.fromAsset(pathlib.join(__dirname, 'latest_secret_version_handler')),
-                runtime: lambda.Runtime.NODEJS_18_X,
+                runtime: new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS, { supportsInlineCode: true }),
                 handler: 'main.handler',
                 timeout: cdk.Duration.seconds(30),
             });
