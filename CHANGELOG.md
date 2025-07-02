@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file. Dates are displayed in UTC.
 
+#### [1.2.0](https://github.com/isotoma/pg-user-and-database-cdk/compare/1.1.3...1.2.0)
+
+- Upgrade Lambda runtime from 18 to 22 [`#9`](https://github.com/isotoma/pg-user-and-database-cdk/pull/9)
+
 #### [1.1.3](https://github.com/isotoma/pg-user-and-database-cdk/compare/1.1.2...1.1.3)
+
+> 21 May 2025
 
 - Quote user and database names in SQL [`#8`](https://github.com/isotoma/pg-user-and-database-cdk/pull/8)
 
