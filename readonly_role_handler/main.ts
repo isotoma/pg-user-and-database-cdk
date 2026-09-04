@@ -105,8 +105,9 @@ const adminClientManagerFor = (properties: CustomResourceProperties): LazyPostgr
         dbSecretArn: properties.adminSecretArn,
         dbClusterHostname: properties.dbClusterHostname,
         dbClusterPort: properties.dbClusterPort,
-        // Role creation and GRANT CONNECT are cluster-level, so which database
-        // we are attached to does not matter, only that one exists.
+        // Creating, altering and dropping a role are cluster-level, so which
+        // database we are attached to does not matter, only that one exists.
+        // Every GRANT and REVOKE runs on the owner connection instead.
         databaseName: 'postgres',
     });
 
@@ -215,6 +216,19 @@ const handleUpdate = async (event: UpdateEvent): Promise<Response> => {
     //
     // Adopt unconditionally here: the physical resource id already says this
     // role is ours, so an existing one is expected rather than a collision.
+    //
+    // That reasoning only holds while the name has not moved. The physical
+    // resource id is the role name from the create, and nothing in the custom
+    // resource triggers a replacement when it changes, so a renamed role would
+    // be created and granted while the id still pointed at the old one: the
+    // original would be orphaned, and the delete would drop the wrong role.
+    const roleCredentials = await roleClientManagerFor(event.ResourceProperties).getCredentials();
+    if (roleCredentials.username !== event.PhysicalResourceId) {
+        throw new Error(
+            `Cannot rename the role from "${event.PhysicalResourceId}" to "${roleCredentials.username}" in place, as it would orphan the original. Remove the construct, deploy, then add it back under the new name.`,
+        );
+    }
+
     await applyGrants(event.ResourceProperties, 'Adopt');
 
     return {
@@ -243,10 +257,16 @@ const handleDelete = async (event: DeleteEvent): Promise<Response> => {
     // through the owner and only the DROP is left to the admin.
     try {
         const ownerClient = await ownerClientManager.getClient();
-        for (const tableName of properties.tableNames) {
-            log('Revoking table privileges', { tableName });
-            await ownerClient.query(`REVOKE ALL ON ${quoteIdentifier(properties.schemaName)}.${quoteIdentifier(tableName)} FROM ${quotedRole};`);
-        }
+        // Every table in the schema, not just the current tableNames. An update
+        // that drops a table from the list deliberately leaves its grant behind,
+        // so revoking only the current list would leave the role holding a
+        // privilege and DROP ROLE would fail with "role cannot be dropped
+        // because some objects depend on it". This only reaches tables the owner
+        // can revoke on, which is the same set it could grant on, and it is a
+        // no-op when the role holds nothing.
+        log('Revoking table privileges across schema', { schemaName: properties.schemaName });
+        await ownerClient.query(`REVOKE ALL ON ALL TABLES IN SCHEMA ${quoteIdentifier(properties.schemaName)} FROM ${quotedRole};`);
+
         log('Revoking schema privileges', { schemaName: properties.schemaName });
         await ownerClient.query(`REVOKE ALL ON SCHEMA ${quoteIdentifier(properties.schemaName)} FROM ${quotedRole};`);
         log('Revoking database privileges', { databaseName: properties.databaseName });

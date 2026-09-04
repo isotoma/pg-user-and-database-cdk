@@ -156,12 +156,13 @@ export class PostgresUserAndDatabase extends Construct {
 
 export interface PostgresReadOnlyRoleProps {
     dbCluster: rds.IDatabaseCluster;
-    // Cluster admin credentials. Used to create the role and grant it CONNECT
-    // on the database.
+    // Cluster admin credentials. Used only to create, alter and drop the role,
+    // which needs CREATEROLE. It issues none of the grants.
     adminSecret: secretsmanager.ISecret;
     // Credentials of the role owning the tables, typically the userSecret of a
-    // PostgresUserAndDatabase. Used to grant SELECT, which the admin cannot do
-    // for tables it does not own.
+    // PostgresUserAndDatabase. Every GRANT and REVOKE runs as this role: on
+    // Aurora the admin is not a true superuser and owns neither the database nor
+    // its tables, so it can grant neither CONNECT nor SELECT.
     ownerSecret: secretsmanager.ISecret;
     // Must have a secretString with username and password keys. If not given, a
     // secret is generated and roleName must be set.
