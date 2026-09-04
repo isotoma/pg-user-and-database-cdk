@@ -177,6 +177,12 @@ export interface PostgresReadOnlyRoleProps {
     // Tables the role may SELECT from. Nothing else in the schema is readable.
     tableNames: string[];
     vpc: ec2.IVpc;
+    // What to do if a role of this name already exists when the resource is
+    // first created. Adopting resets that role's password and grants it SELECT
+    // on the tables, so if it turned out to belong to something else you would
+    // have taken it over. Defaults to Fail. Note that onDelete defaults to
+    // Retain, so recreating a previously retained role needs Adopt.
+    onCreateIfExists?: 'Fail' | 'Adopt';
     // Defaults to Retain
     onDelete?: 'Drop' | 'Retain';
 }
@@ -248,6 +254,7 @@ export class PostgresReadOnlyRole extends Construct {
                 databaseName: props.databaseName,
                 schemaName: props.schemaName ?? 'public',
                 tableNames: props.tableNames,
+                onCreateIfExists: props.onCreateIfExists ?? 'Fail',
                 onDelete: props.onDelete ?? 'Retain',
             },
         });

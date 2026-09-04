@@ -37,6 +37,7 @@ const customResourcePropertiesSchema = z.object({
     databaseName: z.string(),
     schemaName: z.string(),
     tableNames: z.array(z.string()).min(1),
+    onCreateIfExists: z.enum(['Fail', 'Adopt']),
     onDelete: z.enum(['Drop', 'Retain']),
 });
 
@@ -125,7 +126,17 @@ const roleClientManagerFor = (properties: CustomResourceProperties): LazyPostgre
         databaseName: properties.databaseName,
     });
 
-const applyGrants = async (properties: CustomResourceProperties): Promise<void> => {
+/**
+ * Whether an existing role of the same name may be taken over.
+ *
+ * On an update the resource already owns the role, so adopting it is the only
+ * sensible behaviour. On a create there is nothing proving the role belongs to
+ * this resource, and adopting would reset an unrelated role's password and hand
+ * it SELECT on the tables, so that needs an explicit opt-in.
+ */
+type AdoptPolicy = 'Fail' | 'Adopt';
+
+const applyGrants = async (properties: CustomResourceProperties, adoptPolicy: AdoptPolicy): Promise<void> => {
     const adminClientManager = adminClientManagerFor(properties);
     const ownerClientManager = ownerClientManagerFor(properties);
     const roleClientManager = roleClientManagerFor(properties);
@@ -143,8 +154,8 @@ const applyGrants = async (properties: CustomResourceProperties): Promise<void> 
 
     const quotedRole = quoteIdentifier(roleCredentials.username);
 
-    const adminClient = await adminClientManager.getClient();
     try {
+        const adminClient = await adminClientManager.getClient();
         try {
             log('Creating role', { username: roleCredentials.username });
             await adminClient.query(`CREATE ROLE ${quotedRole} WITH LOGIN PASSWORD ${quoteLiteral(roleCredentials.password)};`);
@@ -152,8 +163,13 @@ const applyGrants = async (properties: CustomResourceProperties): Promise<void> 
             if (!isPostgresError(e) || e.code !== PostgresErrorCodes.DUPLICATE_OBJECT) {
                 throw e;
             }
-            // Adopt an existing role rather than failing. This is the normal
-            // path on every update, and on a re-create after onDelete: Retain.
+            if (adoptPolicy === 'Fail') {
+                throw new Error(
+                    `Role "${roleCredentials.username}" already exists. It may belong to something else, and adopting it would reset its password and grant it SELECT on ${properties.tableNames.join(
+                        ', ',
+                    )}. Pass onCreateIfExists: 'Adopt' to take it over deliberately.`,
+                );
+            }
             log('Role already exists, adopting and resetting its password', { username: roleCredentials.username });
             await adminClient.query(`ALTER ROLE ${quotedRole} WITH LOGIN PASSWORD ${quoteLiteral(roleCredentials.password)};`);
         }
@@ -161,8 +177,8 @@ const applyGrants = async (properties: CustomResourceProperties): Promise<void> 
         await adminClientManager.end();
     }
 
-    const ownerClient = await ownerClientManager.getClient();
     try {
+        const ownerClient = await ownerClientManager.getClient();
         log('Granting CONNECT', { databaseName: properties.databaseName });
         await ownerClient.query(`GRANT CONNECT ON DATABASE ${quoteIdentifier(properties.databaseName)} TO ${quotedRole};`);
 
@@ -180,7 +196,9 @@ const applyGrants = async (properties: CustomResourceProperties): Promise<void> 
 
 const handleCreate = async (event: CreateEvent): Promise<Response> => {
     log('Handling create');
-    await applyGrants(event.ResourceProperties);
+    // Nothing here proves an existing role of this name belongs to us, so
+    // taking one over is the caller's decision, not the default.
+    await applyGrants(event.ResourceProperties, event.ResourceProperties.onCreateIfExists);
 
     const roleCredentials = await roleClientManagerFor(event.ResourceProperties).getCredentials();
     return {
@@ -194,7 +212,10 @@ const handleUpdate = async (event: UpdateEvent): Promise<Response> => {
     // Tables dropped from tableNames keep their grant: revoking them would mean
     // tracking the previous property values, and leaving a stale SELECT on a
     // table is the less surprising failure of the two.
-    await applyGrants(event.ResourceProperties);
+    //
+    // Adopt unconditionally here: the physical resource id already says this
+    // role is ours, so an existing one is expected rather than a collision.
+    await applyGrants(event.ResourceProperties, 'Adopt');
 
     return {
         PhysicalResourceId: event.PhysicalResourceId,
@@ -220,8 +241,8 @@ const handleDelete = async (event: DeleteEvent): Promise<Response> => {
     // Postgres refuses to drop a role that still holds a privilege anywhere, and
     // a grant can only be revoked by whoever made it, so every REVOKE goes
     // through the owner and only the DROP is left to the admin.
-    const ownerClient = await ownerClientManager.getClient();
     try {
+        const ownerClient = await ownerClientManager.getClient();
         for (const tableName of properties.tableNames) {
             log('Revoking table privileges', { tableName });
             await ownerClient.query(`REVOKE ALL ON ${quoteIdentifier(properties.schemaName)}.${quoteIdentifier(tableName)} FROM ${quotedRole};`);
@@ -234,8 +255,8 @@ const handleDelete = async (event: DeleteEvent): Promise<Response> => {
         await ownerClientManager.end();
     }
 
-    const adminClient = await adminClientManager.getClient();
     try {
+        const adminClient = await adminClientManager.getClient();
         log('Dropping role', { username: roleCredentials.username });
         await adminClient.query(`DROP ROLE IF EXISTS ${quotedRole};`);
     } finally {

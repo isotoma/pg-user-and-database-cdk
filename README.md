@@ -43,9 +43,23 @@ so the admin can grant neither `CONNECT` on the database nor `SELECT` on its
 tables. The `CONNECT` grant is the trap, since attempting it as the admin fails
 with nothing worse than `WARNING: no privileges were granted`.
 
+`onCreateIfExists` defaults to `Fail`. Adopting an existing role means resetting
+its password and granting it `SELECT` on the tables, so if the name turned out to
+belong to something else you would have quietly taken it over. Note the
+interaction with `onDelete`, which defaults to `Retain`: recreating a role that a
+previous stack left behind needs `onCreateIfExists: 'Adopt'`. Updates always
+adopt, since the resource already owns the role by then.
+
 `onDelete` defaults to `Retain`, unlike `PostgresUserAndDatabase`. Removing the
 construct leaves the role in place rather than breaking whatever is still
 connecting with it; pass `Drop` to revoke the grants and drop the role.
+
+With `onDelete: 'Drop'`, avoid removing the owning `PostgresUserAndDatabase` in
+the same operation. The construct only takes `ownerSecret`, so CloudFormation has
+no dependency on the owner user itself, and every `REVOKE` has to run as that
+owner. If the owner is dropped first the revokes cannot authenticate and the
+stack deletion stalls. Remove the reader role in one deployment and the owner in
+the next, or drop the role by hand.
 
 Adding a table to `tableNames` grants it on the next deploy. Removing one does
 not revoke it: that would mean tracking the previous property values, and a
