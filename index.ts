@@ -170,7 +170,8 @@ export interface PostgresReadOnlyRoleProps {
     // Must be set if roleSecret is not provided
     roleName?: string;
     // Explicit name for the generated secret. Worth setting when something
-    // outside CloudFormation has to find the secret by name.
+    // outside CloudFormation has to find the secret by name. Ignored when
+    // roleSecret is supplied, since nothing is generated in that case.
     roleSecretName?: string;
     databaseName: string;
     // Defaults to public
@@ -196,6 +197,9 @@ export interface PostgresReadOnlyRoleProps {
  * case, a role that owns nothing and only reads someone else's tables.
  */
 export class PostgresReadOnlyRole extends Construct {
+    // The generated secret carries host, port, dbname, username and password.
+    // When roleSecret was supplied this is that secret unchanged, so it holds
+    // whatever the caller put in it.
     readonly roleSecret: secretsmanager.ISecret;
 
     constructor(scope: Construct, id: string, props: PostgresReadOnlyRoleProps) {

@@ -34,6 +34,11 @@ const reader = new PostgresReadOnlyRole(this, 'ReaderRole', {
 // reader.roleSecret holds host, port, dbname, username and password
 ```
 
+That secret shape applies when the construct generates the secret, as above. Pass
+your own `roleSecret` instead and `reader.roleSecret` is exactly that secret,
+which only has to carry `username` and `password` — the connection details are
+yours to supply.
+
 `adminSecret` and `ownerSecret` are both required, and the split between them is
 not the obvious one. Creating the role needs `CREATEROLE`, which the cluster
 admin has and the application user does not. Every `GRANT` has to come from the
