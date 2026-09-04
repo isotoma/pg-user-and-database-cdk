@@ -248,36 +248,52 @@ const handleDelete = async (event: DeleteEvent): Promise<Response> => {
     const properties = event.ResourceProperties;
     const adminClientManager = adminClientManagerFor(properties);
     const ownerClientManager = ownerClientManagerFor(properties);
-    const roleCredentials = await roleClientManagerFor(properties).getCredentials();
 
-    const quotedRole = quoteIdentifier(roleCredentials.username);
+    // The physical resource id, not the secret. The id is what this resource
+    // actually created and is immutable for its lifetime, whereas the secret is
+    // a live value someone could edit out of band; trusting it would let a
+    // delete revoke from and drop a role this resource never owned.
+    const roleName = event.PhysicalResourceId;
+    const quotedRole = quoteIdentifier(roleName);
 
     // Postgres refuses to drop a role that still holds a privilege anywhere, and
     // a grant can only be revoked by whoever made it, so every REVOKE goes
     // through the owner and only the DROP is left to the admin.
     try {
-        const ownerClient = await ownerClientManager.getClient();
-        // Every table in the schema, not just the current tableNames. An update
-        // that drops a table from the list deliberately leaves its grant behind,
-        // so revoking only the current list would leave the role holding a
-        // privilege and DROP ROLE would fail with "role cannot be dropped
-        // because some objects depend on it". This only reaches tables the owner
-        // can revoke on, which is the same set it could grant on, and it is a
-        // no-op when the role holds nothing.
-        log('Revoking table privileges across schema', { schemaName: properties.schemaName });
-        await ownerClient.query(`REVOKE ALL ON ALL TABLES IN SCHEMA ${quoteIdentifier(properties.schemaName)} FROM ${quotedRole};`);
-
-        log('Revoking schema privileges', { schemaName: properties.schemaName });
-        await ownerClient.query(`REVOKE ALL ON SCHEMA ${quoteIdentifier(properties.schemaName)} FROM ${quotedRole};`);
-        log('Revoking database privileges', { databaseName: properties.databaseName });
-        await ownerClient.query(`REVOKE ALL ON DATABASE ${quoteIdentifier(properties.databaseName)} FROM ${quotedRole};`);
-    } finally {
-        await ownerClientManager.end();
-    }
-
-    try {
         const adminClient = await adminClientManager.getClient();
-        log('Dropping role', { username: roleCredentials.username });
+
+        // REVOKE against a role that does not exist is an error, unlike DROP
+        // ROLE IF EXISTS. Without this check a rollback after a failed create
+        // would fail on the first revoke and leave the stack stuck.
+        const existing = await adminClient.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [roleName]);
+        if (existing.rowCount === null || existing.rowCount === 0) {
+            log('Role does not exist, nothing to drop', { username: roleName });
+            return {
+                PhysicalResourceId: event.PhysicalResourceId,
+            };
+        }
+
+        try {
+            const ownerClient = await ownerClientManager.getClient();
+            // Every table in the schema, not just the current tableNames. An
+            // update that drops a table from the list deliberately leaves its
+            // grant behind, so revoking only the current list would leave the
+            // role holding a privilege and DROP ROLE would fail with "role
+            // cannot be dropped because some objects depend on it". This only
+            // reaches tables the owner can revoke on, which is the same set it
+            // could grant on, and it is a no-op when the role holds nothing.
+            log('Revoking table privileges across schema', { schemaName: properties.schemaName });
+            await ownerClient.query(`REVOKE ALL ON ALL TABLES IN SCHEMA ${quoteIdentifier(properties.schemaName)} FROM ${quotedRole};`);
+
+            log('Revoking schema privileges', { schemaName: properties.schemaName });
+            await ownerClient.query(`REVOKE ALL ON SCHEMA ${quoteIdentifier(properties.schemaName)} FROM ${quotedRole};`);
+            log('Revoking database privileges', { databaseName: properties.databaseName });
+            await ownerClient.query(`REVOKE ALL ON DATABASE ${quoteIdentifier(properties.databaseName)} FROM ${quotedRole};`);
+        } finally {
+            await ownerClientManager.end();
+        }
+
+        log('Dropping role', { username: roleName });
         await adminClient.query(`DROP ROLE IF EXISTS ${quotedRole};`);
     } finally {
         await adminClientManager.end();
