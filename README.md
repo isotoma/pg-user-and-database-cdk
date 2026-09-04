@@ -43,6 +43,15 @@ so the admin can grant neither `CONNECT` on the database nor `SELECT` on its
 tables. The `CONNECT` grant is the trap, since attempting it as the admin fails
 with nothing worse than `WARNING: no privileges were granted`.
 
+One limitation on "nothing else": the role still inherits whatever `PUBLIC`
+holds. On a stock Postgres 16 database that is `CONNECT` and `TEMPORARY`, so the
+role can open temporary tables even though it was never granted anything beyond
+`SELECT`. That cannot be fixed per-role, because there is no way to revoke a
+`PUBLIC` grant from one role: it needs `REVOKE TEMPORARY ON DATABASE <db> FROM
+PUBLIC`, which changes the database for every role and so is left to the caller
+rather than done here. `PUBLIC` no longer has `CREATE` on the `public` schema,
+which changed in Postgres 15.
+
 `onCreateIfExists` defaults to `Fail`. Adopting an existing role means resetting
 its password and granting it `SELECT` on the tables, so if the name turned out to
 belong to something else you would have quietly taken it over. Note the
