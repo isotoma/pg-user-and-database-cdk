@@ -10,147 +10,14 @@
 // and database. The user should be granted CREATEDB and LOGIN access,
 // and that user should then create the database.
 
-import * as pg from 'pg';
-import * as secretsmanager from '@aws-sdk/client-secrets-manager';
 import { z } from 'zod';
+
+import { LazyPostgresClientFromSecretsManager, log } from '../shared/postgres';
+import { PostgresErrorCodes, isPostgresError } from '../shared/sql';
 
 interface Response {
     PhysicalResourceId: string;
 }
-
-// Relevant error codes taken from
-// https://www.postgresql.org/docs/current/errcodes-appendix.html
-enum PostgresErrorCodes {
-    DUPLICATE_DATABASE = '42P04',
-    DUPLICATE_OBJECT = '42710',
-    INSUFFICIENT_PRIVILEGE = '42501',
-    AUTHENTICATION_FAILED = '28P01',
-}
-
-interface PostgresError extends Error {
-    code: string;
-}
-
-const isPostgresError = (e: unknown): e is PostgresError => {
-    if (typeof e !== 'object' || e === null) {
-        return false;
-    }
-
-    // Check extends Error
-    if (!('message' in e && 'name' in e)) {
-        return false;
-    }
-
-    // Check has code
-    if (!('code' in e)) {
-        return false;
-    }
-
-    return typeof e.code === 'string';
-};
-
-// Class that lazily creates a Postgres client from a secret ARN,
-// dbClusterHostname, dbClusterPort and databaseName, and caches the client
-interface LazyPostgresClientFromSecretsManagerProps {
-    dbSecretArn: string;
-    dbClusterHostname: string;
-    dbClusterPort: number;
-    databaseName: string;
-}
-
-class LazyPostgresClientFromSecretsManager {
-    private props: LazyPostgresClientFromSecretsManagerProps;
-    private client?: pg.Client;
-    private credentials?: DbCredentials;
-
-    constructor(props: LazyPostgresClientFromSecretsManagerProps) {
-        this.props = props;
-    }
-
-    // Getters for the props
-    get dbSecretArn(): string {
-        return this.props.dbSecretArn;
-    }
-
-    get dbClusterHostname(): string {
-        return this.props.dbClusterHostname;
-    }
-
-    get dbClusterPort(): number {
-        return this.props.dbClusterPort;
-    }
-
-    get databaseName(): string {
-        return this.props.databaseName;
-    }
-
-    async getCredentials(): Promise<DbCredentials> {
-        if (this.credentials) {
-            return this.credentials;
-        }
-
-        const secretsManagerClient = new secretsmanager.SecretsManagerClient({
-            region: process.env['AWS_REGION'],
-        });
-
-        const dbSecret = await secretsManagerClient.send(
-            new secretsmanager.GetSecretValueCommand({
-                SecretId: this.props.dbSecretArn,
-            }),
-        );
-
-        const dbSecretJson: unknown = JSON.parse(dbSecret.SecretString ?? '{}');
-
-        const dbSecretJsonSchema = z.object({
-            username: z.string(),
-            password: z.string(),
-        });
-
-        const validatedDbSecretJson = dbSecretJsonSchema.parse(dbSecretJson);
-
-        this.credentials = {
-            username: validatedDbSecretJson.username,
-            password: validatedDbSecretJson.password,
-        };
-
-        return this.credentials;
-    }
-
-    async getClient(): Promise<pg.Client> {
-        if (this.client) {
-            return this.client;
-        }
-
-        if (!this.credentials) {
-            this.credentials = await this.getCredentials();
-        }
-
-        this.client = new pg.Client({
-            host: this.props.dbClusterHostname,
-            port: this.props.dbClusterPort,
-            user: this.credentials.username,
-            password: this.credentials.password,
-            ssl: {
-                rejectUnauthorized: false,
-            },
-            database: this.props.databaseName,
-        });
-
-        await this.client.connect();
-        return this.client;
-    }
-
-    async end(): Promise<void> {
-        if (this.client) {
-            await this.client.end();
-        }
-    }
-}
-
-// Log function that takes a message and optionally additional data, writes logs as JSON
-const log = (message: string, data?: unknown): void => {
-    console.log(JSON.stringify({ message, data }));
-};
 
 const customResourcePropertiesSchema = z.object({
     dbClusterHostname: z.string(),
@@ -187,11 +54,6 @@ interface DeleteEvent {
 }
 
 type Event = CreateEvent | UpdateEvent | DeleteEvent;
-
-interface DbCredentials {
-    username: string;
-    password: string;
-}
 
 const decodeEvent = (event: unknown): Event => {
     const eventSchema = z.object({
