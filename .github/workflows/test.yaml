@@ -7,15 +7,25 @@ jobs:
     runs-on: ubuntu-latest
     container: ubuntu:focal
 
+    # The versions consumers actually build on: ifg-harvest and rowan are on
+    # 22.x, medusa on 24. Node 16 was dropped here having gone end of life in
+    # September 2023; what governs whether the published bundle runs on an older
+    # runtime is the esbuild --target in compile-handler, not the Node that
+    # built it.
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22', '24']
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js 16.x
-      uses: actions/setup-node@v4
+    - uses: actions/checkout@v7
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v7
       with:
-        node-version: 16.x
-    - run: npm i -g npm@9
+        node-version: ${{ matrix.node-version }}
     - run: npm ci
     - run: npm run lint-check
     - run: npm run -- clean-handler
     - run: npm run compile
     - run: npm run -- docs --treatWarningsAsErrors
+    - run: npm test
