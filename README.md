@@ -99,3 +99,44 @@ job builds into `build/`, copies `package.json` in, and publishes from there, so
 npm publishes whatever the version field says and not what the tag says. Tagging
 `1.3.0` while `package.json` still reads `1.2.0` fails at `npm publish`, because
 that version already exists.
+
+### Approving the release
+
+Pushing the tag does not put anything in front of consumers. The workflow uses
+[staged publishing](https://docs.npmjs.com/staged-publishing/): the version lands
+in the registry but is not installable until a maintainer approves it with 2FA.
+So a compromised workflow cannot publish on its own.
+
+After the tag job goes green, approve it in the Staged Packages tab on npmjs.com,
+or from the CLI:
+
+```bash
+npm stage list
+npm stage approve <stage-id>
+```
+
+Either route prompts for 2FA, which is the point of the step. `npm stage reject`
+discards it instead. Note a staged version occupies its version number, so a
+rejected `1.3.0` has to be rejected before `1.3.0` can be staged again.
+
+### Authentication
+
+Publishing uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
+over OIDC, so there is no `NPM_TOKEN` secret. The job requests `id-token: write`
+and the npm CLI exchanges that for a short-lived token by itself, which also
+means provenance attestations are generated automatically.
+
+The trust relationship is configured on npmjs.com under the package's settings,
+naming the organisation, the repository, and the workflow filename
+(`publish.yaml`). It is configured to allow `npm stage publish` and not direct
+`npm publish`. Existing configurations cannot be edited, only deleted and
+recreated.
+
+Staged publishing needs npm 11.15.0 or later, above the 11.5.1 that trusted
+publishing alone needs and above the 11.13.0 that Node 24 currently bundles,
+which is why the workflow installs npm explicitly. Below either floor the CLI
+quietly falls back to token authentication and fails with a misleading `E404` on
+the `PUT`, so the workflow asserts the version rather than letting that happen.
+
+OIDC covers `npm publish` and `npm stage publish` only. The approve, reject, list
+and view subcommands need interactive authentication and cannot use it.
