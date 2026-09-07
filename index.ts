@@ -153,3 +153,118 @@ export class PostgresUserAndDatabase extends Construct {
         customResource.node.addDependency(this.userSecret);
     }
 }
+
+export interface PostgresReadOnlyRoleProps {
+    dbCluster: rds.IDatabaseCluster;
+    // Cluster admin credentials. Used only to create, alter and drop the role,
+    // which needs CREATEROLE. It issues none of the grants.
+    adminSecret: secretsmanager.ISecret;
+    // Credentials of the role owning the tables, typically the userSecret of a
+    // PostgresUserAndDatabase. Every GRANT and REVOKE runs as this role: on
+    // Aurora the admin is not a true superuser and owns neither the database nor
+    // its tables, so it can grant neither CONNECT nor SELECT.
+    ownerSecret: secretsmanager.ISecret;
+    // Must have a secretString with username and password keys. If not given, a
+    // secret is generated and roleName must be set.
+    roleSecret?: secretsmanager.ISecret;
+    // Must be set if roleSecret is not provided
+    roleName?: string;
+    // Explicit name for the generated secret. Worth setting when something
+    // outside CloudFormation has to find the secret by name. Ignored when
+    // roleSecret is supplied, since nothing is generated in that case.
+    roleSecretName?: string;
+    databaseName: string;
+    // Defaults to public
+    schemaName?: string;
+    // Tables the role may SELECT from. Nothing else in the schema is readable.
+    tableNames: string[];
+    vpc: ec2.IVpc;
+    // What to do if a role of this name already exists when the resource is
+    // first created. Adopting resets that role's password and grants it SELECT
+    // on the tables, so if it turned out to belong to something else you would
+    // have taken it over. Defaults to Fail. Note that onDelete defaults to
+    // Retain, so recreating a previously retained role needs Adopt.
+    onCreateIfExists?: 'Fail' | 'Adopt';
+    // Defaults to Retain
+    onDelete?: 'Drop' | 'Retain';
+}
+
+/**
+ * A Postgres login role with SELECT on named tables and nothing else.
+ *
+ * PostgresUserAndDatabase cannot express this: it requires a databaseName and
+ * always creates a user owning a database of its own. This is the opposite
+ * case, a role that owns nothing and only reads someone else's tables.
+ */
+export class PostgresReadOnlyRole extends Construct {
+    // The generated secret carries host, port, dbname, username and password.
+    // When roleSecret was supplied this is that secret unchanged, so it holds
+    // whatever the caller put in it.
+    readonly roleSecret: secretsmanager.ISecret;
+
+    constructor(scope: Construct, id: string, props: PostgresReadOnlyRoleProps) {
+        super(scope, id);
+
+        if (props.tableNames.length === 0) {
+            throw new Error('Must provide at least one table name; a role with no grants has no purpose');
+        }
+
+        const handler = new lambda.Function(this, 'OnEvent', {
+            code: lambda.Code.fromAsset(pathlib.join(__dirname, 'readonly_role_handler')),
+            runtime: new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS, { supportsInlineCode: true }),
+            handler: 'main.handler',
+            vpc: props.vpc,
+            timeout: cdk.Duration.seconds(30),
+        });
+
+        if (props.roleSecret) {
+            this.roleSecret = props.roleSecret;
+        } else if (props.roleName) {
+            this.roleSecret = new secretsmanager.Secret(this, 'RoleSecret', {
+                ...(props.roleSecretName ? { secretName: props.roleSecretName } : {}),
+                generateSecretString: {
+                    passwordLength: 30,
+                    secretStringTemplate: JSON.stringify({
+                        username: props.roleName,
+                        dbname: props.databaseName,
+                        host: props.dbCluster.clusterEndpoint.hostname,
+                        port: props.dbCluster.clusterEndpoint.port,
+                    }),
+                    generateStringKey: 'password',
+                    excludeCharacters: DEFAULT_PASSWORD_EXCLUDE_CHARS,
+                },
+            });
+        } else {
+            throw new Error('Must provide either roleSecret or roleName');
+        }
+
+        props.adminSecret.grantRead(handler);
+        props.ownerSecret.grantRead(handler);
+        this.roleSecret.grantRead(handler);
+
+        handler.connections.allowToDefaultPort(props.dbCluster);
+
+        const provider = new cr.Provider(this, 'Provider', {
+            onEventHandler: handler,
+        });
+
+        const customResource = new cdk.CustomResource(this, 'Resource', {
+            serviceToken: provider.serviceToken,
+            properties: {
+                dbClusterHostname: props.dbCluster.clusterEndpoint.hostname,
+                dbClusterPort: props.dbCluster.clusterEndpoint.port,
+                adminSecretArn: props.adminSecret.secretArn,
+                ownerSecretArn: props.ownerSecret.secretArn,
+                roleSecretArn: this.roleSecret.secretArn,
+                databaseName: props.databaseName,
+                schemaName: props.schemaName ?? 'public',
+                tableNames: props.tableNames,
+                onCreateIfExists: props.onCreateIfExists ?? 'Fail',
+                onDelete: props.onDelete ?? 'Retain',
+            },
+        });
+
+        customResource.node.addDependency(...handler.connections.securityGroups);
+        customResource.node.addDependency(this.roleSecret);
+    }
+}

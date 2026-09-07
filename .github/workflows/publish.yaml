@@ -8,13 +8,15 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v7
     # Setup .npmrc file to publish to npm
-    - uses: actions/setup-node@v1
+    - uses: actions/setup-node@v7
       with:
-        node-version: '16.x'
+        node-version: '24'
         registry-url: 'https://registry.npmjs.org'
-    - run: npm install
+    # npm ci rather than npm install, so the published artefact is built from
+    # the locked dependency tree rather than whatever resolves at publish time.
+    - run: npm ci
     - run: npm run compile
     - run: cd build && npm publish
       env:
@@ -22,7 +24,7 @@ jobs:
 
     - run: npm run docs
     - name: Deploy docs
-      uses: JamesIves/github-pages-deploy-action@4.1.5
+      uses: JamesIves/github-pages-deploy-action@v4
       with:
         branch: gh-pages
         folder: docs
