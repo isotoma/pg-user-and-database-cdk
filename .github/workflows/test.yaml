@@ -3,12 +3,12 @@ name: "Run linting and tests"
 on: push
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     container: ubuntu:focal
 
     # The versions consumers actually build on: ifg-harvest and rowan are on
-    # 22.x, medusa on 24. Node 16 was dropped here having gone end of life in
+    # 22.x, medusa on 24. Node 16 was dropped having gone end of life in
     # September 2023; what governs whether the published bundle runs on an older
     # runtime is the esbuild --target in compile-handler, not the Node that
     # built it.
@@ -29,3 +29,19 @@ jobs:
     - run: npm run compile
     - run: npm run -- docs --treatWarningsAsErrors
     - run: npm test
+
+  # Branch protection on main requires a status check named exactly "build".
+  # A matrix job reports one check per leg ("build (22)", "build (24)") and
+  # never the bare name, so without this the required check would never arrive
+  # and every PR would sit blocked with all its legs green. This gate keeps the
+  # contract stable, so the matrix can change without touching repo settings.
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    steps:
+    - name: Check that every matrix leg succeeded
+      run: |
+        result='${{ needs.test.result }}'
+        echo "matrix result: $result"
+        [ "$result" = 'success' ]
