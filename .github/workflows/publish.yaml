@@ -14,7 +14,11 @@ jobs:
       with:
         node-version: '16.x'
         registry-url: 'https://registry.npmjs.org'
-    - run: npm install
+    # Matches test.yaml: the same npm, and npm ci rather than npm install, so
+    # the published artefact is built from the locked dependency tree rather
+    # than whatever happens to resolve at publish time.
+    - run: npm i -g npm@9
+    - run: npm ci
     - run: npm run compile
     - run: cd build && npm publish
       env:

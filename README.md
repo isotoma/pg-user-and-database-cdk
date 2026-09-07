@@ -79,3 +79,23 @@ Adding a table to `tableNames` grants it on the next deploy. Removing one does
 not revoke it: that would mean tracking the previous property values, and a
 stale `SELECT` is the less surprising of the two failure modes. Use `Drop` and
 recreate if a grant genuinely needs removing.
+
+## Releasing
+
+From an up-to-date `main`:
+
+```bash
+npm version minor    # or patch / major
+git push && git push --tags
+```
+
+`npm version` bumps `package.json`, regenerates `CHANGELOG.md`, commits, and tags.
+`.npmrc` sets `tag-version-prefix=""`, so the tag is `1.3.0` rather than `v1.3.0`,
+which is the form `.github/workflows/publish.yaml` triggers on. Pushing the tag
+builds and publishes to npm and deploys the typedoc output to `gh-pages`.
+
+Do the bump and the tag together, which is what `npm version` is for. The publish
+job builds into `build/`, copies `package.json` in, and publishes from there, so
+npm publishes whatever the version field says and not what the tag says. Tagging
+`1.3.0` while `package.json` still reads `1.2.0` fails at `npm publish`, because
+that version already exists.
