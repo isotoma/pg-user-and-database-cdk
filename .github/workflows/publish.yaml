@@ -7,21 +7,34 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Publishing uses npm trusted publishing over OIDC rather than a stored
+      # NPM_TOKEN, so there is no long-lived credential to leak or silently
+      # expire. This permission lets the job mint the short-lived OIDC token.
+      id-token: write
     steps:
     - uses: actions/checkout@v7
-    # Setup .npmrc file to publish to npm
+    # registry-url is still needed: it writes the .npmrc pointing at npmjs.org.
+    # No NODE_AUTH_TOKEN, the npm CLI picks up the OIDC token by itself.
     - uses: actions/setup-node@v7
       with:
         node-version: '24'
         registry-url: 'https://registry.npmjs.org'
+    # Trusted publishing needs npm 11.5.1 or later. Below that the CLI silently
+    # falls back to token auth and fails with a misleading E404 on the PUT, so
+    # fail here with something that actually says what is wrong.
+    - name: Check npm is new enough for trusted publishing
+      run: |
+        required=11.5.1
+        actual=$(npm --version)
+        echo "npm $actual (need >= $required)"
+        [ "$(printf '%s\n%s\n' "$required" "$actual" | sort -V | head -1)" = "$required" ]
     # npm ci rather than npm install, so the published artefact is built from
     # the locked dependency tree rather than whatever resolves at publish time.
     - run: npm ci
     - run: npm run compile
     - run: cd build && npm publish
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
     - run: npm run docs
     - name: Deploy docs
       uses: JamesIves/github-pages-deploy-action@v4

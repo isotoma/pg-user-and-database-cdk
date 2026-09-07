@@ -99,3 +99,21 @@ job builds into `build/`, copies `package.json` in, and publishes from there, so
 npm publishes whatever the version field says and not what the tag says. Tagging
 `1.3.0` while `package.json` still reads `1.2.0` fails at `npm publish`, because
 that version already exists.
+
+### Authentication
+
+Publishing uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
+over OIDC, so there is no `NPM_TOKEN` secret. The job requests `id-token: write`
+and the npm CLI exchanges that for a short-lived publish token by itself, which
+also means provenance attestations are generated automatically.
+
+The trust relationship is configured on npmjs.com under the package's settings,
+naming the organisation, the repository, and the workflow filename
+(`publish.yaml`). Two things to know if it ever needs recreating: configurations
+created after 3rd September 2026 default to allowing `npm stage publish` only, so
+direct publishing has to be ticked explicitly or the job fails; and existing
+configurations cannot be edited, only deleted and recreated.
+
+Trusted publishing needs npm 11.5.1 or later. Below that the CLI quietly falls
+back to token authentication and fails with a misleading `E404` on the `PUT`, so
+the workflow asserts the version rather than letting that happen.
